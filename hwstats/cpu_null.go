@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !(linux || darwin)
+//go:build !linux
 
 package hwstats
 
@@ -32,7 +32,7 @@ func (p *nullStatCPUMonitor) numCPU() float64 {
 }
 
 func newPlatformCPUMonitor() (platformCPUMonitor, error) {
-	os.Stderr.WriteString("CPU monitoring unsupported on current platform. Server capacity management will be disabled", nil)
+	os.Stderr.WriteString("CPU monitoring unsupported on current platform. Server capacity management will be disabled")
 
 	return &nullStatCPUMonitor{}, nil
 }

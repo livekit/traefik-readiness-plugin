@@ -37,7 +37,7 @@ type CPUStats struct {
 	closeChan chan struct{}
 }
 
-func NewCPUStats(idleUpdateCallback func(idle float64)) (*CPUStats, error) {
+func NewCPUStats() (*CPUStats, error) {
 	p, err := newPlatformCPUMonitor()
 	if err != nil {
 		return nil, err

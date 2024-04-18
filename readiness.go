@@ -46,7 +46,7 @@ type Readiness struct {
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	cpuStats, err := hwstats.NewCPUStats(nil)
+	cpuStats, err := hwstats.NewCPUStats()
 	if err != nil {
 		return nil, err
 	}

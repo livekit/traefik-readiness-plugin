@@ -67,8 +67,7 @@ func newPlatformCPUMonitor() (platformCPUMonitor, error) {
 		}
 	}
 	if cg == nil {
-		os.Stdout.WriteString("failed reading cgroup specific cpu stats, falling back to system wide implementation")
-		return newOSStatCPUMonitor()
+		return nil, errors.New("failed reading cgroup specific cpu stats")
 	}
 
 	cpu, err := cg.getTotalCPUTime()

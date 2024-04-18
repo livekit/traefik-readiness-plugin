@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package traefikreadinessplugin
+package traefik_readiness_plugin
 
 import (
 	"context"

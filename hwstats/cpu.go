@@ -17,9 +17,8 @@ package hwstats
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
-
-	"go.uber.org/atomic"
 )
 
 // This object returns cgroup quota aware cpu stats. On other systems than Linux,
@@ -31,11 +30,11 @@ type platformCPUMonitor interface {
 }
 
 type CPUStats struct {
-	idleCPUs atomic.Float64
+	mu       sync.RWMutex
+	idleCPUs float64
 	platform platformCPUMonitor
 
-	idleCallback func(idle float64)
-	closeChan    chan struct{}
+	closeChan chan struct{}
 }
 
 func NewCPUStats(idleUpdateCallback func(idle float64)) (*CPUStats, error) {
@@ -45,9 +44,8 @@ func NewCPUStats(idleUpdateCallback func(idle float64)) (*CPUStats, error) {
 	}
 
 	c := &CPUStats{
-		platform:     p,
-		idleCallback: idleUpdateCallback,
-		closeChan:    make(chan struct{}),
+		platform:  p,
+		closeChan: make(chan struct{}),
 	}
 
 	go c.monitorCPULoad()
@@ -56,7 +54,10 @@ func NewCPUStats(idleUpdateCallback func(idle float64)) (*CPUStats, error) {
 }
 
 func (c *CPUStats) GetCPUIdle() float64 {
-	return c.idleCPUs.Load()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.idleCPUs
 }
 
 func (c *CPUStats) NumCPU() float64 {
@@ -68,7 +69,7 @@ func (c *CPUStats) Stop() {
 }
 
 func (c *CPUStats) monitorCPULoad() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -82,7 +83,9 @@ func (c *CPUStats) monitorCPULoad() {
 				continue
 			}
 
-			c.idleCPUs.Store(idle)
+			c.mu.RLock()
+			c.idleCPUs = idle
+			c.mu.RUnlock()
 		}
 	}
 }

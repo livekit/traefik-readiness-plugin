@@ -21,9 +21,6 @@ import (
 	"time"
 )
 
-// This object returns cgroup quota aware cpu stats. On other systems than Linux,
-// it falls back to full system stats
-
 type platformCPUMonitor interface {
 	getCPUIdle() (float64, error)
 	numCPU() float64

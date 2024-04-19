@@ -16,24 +16,30 @@ package traefik_readiness_plugin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/livekit/traefik-readiness-plugin/hwstats"
 )
 
 // Config the plugin configuration.
 type Config struct {
-	ReadyPath     string  `json:"ready_path,omitempty"`
-	ReadyCPULimit float64 `json:"ready_cpu_limit,omitempty"`
+	ReadyPath             string  `json:"ready_path,omitempty"`
+	ReadyCPULimit         float64 `json:"ready_cpu_limit,omitempty"`
+	TraefikAPIPort        int     `json:"traefik_api_port,omitempty"`
+	TraefikAPIRawdataPath string  `json:"traefik_api_rawdata_path,omitempty"`
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		ReadyPath:     "/ready",
-		ReadyCPULimit: 0.8,
+		ReadyPath:             "/ready",
+		ReadyCPULimit:         0.8,
+		TraefikAPIPort:        9000,
+		TraefikAPIRawdataPath: "/api/rawdata",
 	}
 }
 
@@ -42,8 +48,9 @@ type Readiness struct {
 	name     string
 	cpuStats *hwstats.CPUStats
 
-	readyPath     string
-	readyCPULimit float64
+	readyPath         string
+	readyCPULimit     float64
+	rawdataHasSettled bool
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
@@ -61,33 +68,74 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		readyCPULimit: config.ReadyCPULimit,
 	}
 
+	go r.rawdataPoller(config.TraefikAPIPort, config.TraefikAPIRawdataPath)
+
 	return r, nil
 }
 
 func (p *Readiness) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if req.URL.Path == p.readyPath {
-		os.Stdout.WriteString(fmt.Sprintf("readiness plugin recieved request: %v\n", req.URL.Path))
-
-		var cpuLoad float64
-		cpuIdle := p.cpuStats.GetCPUIdle()
-		if cpuIdle > 0 {
-			cpuLoad = 1 - (cpuIdle / p.cpuStats.NumCPU())
-		}
-
-		if cpuLoad > p.readyCPULimit {
-			rw.WriteHeader(http.StatusNotAcceptable)
-			rw.Write([]byte("Not ready: CPU Limit reached\n"))
-		} else {
-			rw.WriteHeader(http.StatusOK)
-			rw.Write([]byte("Ready\n"))
-		}
-
-		rw.Write([]byte("\n"))
-		rw.Write([]byte(fmt.Sprintf("Num CPUs: %v\n", p.cpuStats.NumCPU())))
-		rw.Write([]byte(fmt.Sprintf("CPU Load: %v / %v\n", cpuLoad, p.readyCPULimit)))
-
+	if req.URL.Path != p.readyPath {
+		p.next.ServeHTTP(rw, req)
 		return
 	}
 
-	p.next.ServeHTTP(rw, req)
+	os.Stdout.WriteString(fmt.Sprintf("readiness plugin recieved request: %v\n", req.URL.Path))
+
+	var cpuLoad float64
+	cpuIdle := p.cpuStats.GetCPUIdle()
+	if cpuIdle > 0 {
+		cpuLoad = 1 - (cpuIdle / p.cpuStats.NumCPU())
+	}
+
+	if cpuLoad > p.readyCPULimit {
+		rw.WriteHeader(http.StatusNotAcceptable)
+		rw.Write([]byte("Not ready: CPU Limit reached\n"))
+	} else if !p.rawdataHasSettled {
+		rw.WriteHeader(http.StatusNotAcceptable)
+		rw.Write([]byte("Not ready: Traefik raw data has not yet settled\n"))
+	} else {
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte("Ready\n"))
+	}
+
+	rw.Write([]byte("\n"))
+	rw.Write([]byte(fmt.Sprintf("Num CPUs: %v\n", p.cpuStats.NumCPU())))
+	rw.Write([]byte(fmt.Sprintf("CPU Load: %v / %v\n", cpuLoad, p.readyCPULimit)))
+}
+
+func (p *Readiness) rawdataPoller(apiPort int, apiRawdataPath string) {
+	ticker := time.NewTicker(1 * time.Second)
+	defer func() {
+		p.rawdataHasSettled = true // benign race condition here is ok
+		ticker.Stop()
+	}()
+
+	var lastElementCount int
+	for {
+		select {
+		case <-ticker.C:
+			resp, err := http.Get(fmt.Sprintf("http://localhost:%v%v", apiPort, apiRawdataPath))
+			if err != nil {
+				os.Stderr.WriteString(fmt.Sprintf("error getting data from traefik api: %v\n", err))
+				return
+			}
+			rawDataElements := make(map[string]map[string]json.RawMessage)
+			if err := json.NewDecoder(resp.Body).Decode(&rawDataElements); err != nil {
+				os.Stderr.WriteString(fmt.Sprintf("error decoding traefik api response: %v\n", err))
+				resp.Body.Close()
+				return
+			}
+			resp.Body.Close()
+
+			var elementCount int
+			for _, v := range rawDataElements {
+				elementCount += len(v)
+			}
+			if elementCount == lastElementCount {
+				// data has settled
+				return
+			}
+			lastElementCount = elementCount
+		}
+	}
 }

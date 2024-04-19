@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/livekit/traefik-readiness-plugin/hwstats"
 )
@@ -64,6 +65,8 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (p *Readiness) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	os.Stdout.WriteString(fmt.Sprintf("readiness plugin recieved request: %v\n", req.URL.Path))
+
 	if req.URL.Path == p.readyPath {
 		var cpuLoad float64
 		cpuIdle := p.cpuStats.GetCPUIdle()

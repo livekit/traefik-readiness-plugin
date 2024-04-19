@@ -32,7 +32,7 @@ type Config struct {
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		ReadyPath:     "/ping/ready",
+		ReadyPath:     "/ready",
 		ReadyCPULimit: 0.8,
 	}
 }
@@ -65,9 +65,9 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (p *Readiness) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	os.Stdout.WriteString(fmt.Sprintf("readiness plugin recieved request: %v\n", req.URL.Path))
-
 	if req.URL.Path == p.readyPath {
+		os.Stdout.WriteString(fmt.Sprintf("readiness plugin recieved request: %v\n", req.URL.Path))
+
 		var cpuLoad float64
 		cpuIdle := p.cpuStats.GetCPUIdle()
 		if cpuIdle > 0 {
@@ -82,7 +82,7 @@ func (p *Readiness) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			rw.Write([]byte("Ready\n"))
 		}
 
-		rw.Write([]byte("/n"))
+		rw.Write([]byte("\n"))
 		rw.Write([]byte(fmt.Sprintf("Num CPUs: %v\n", p.cpuStats.NumCPU())))
 		rw.Write([]byte(fmt.Sprintf("CPU Load: %v / %v\n", cpuLoad, p.readyCPULimit)))
 

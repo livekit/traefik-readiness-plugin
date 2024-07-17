@@ -87,18 +87,27 @@ func (p *Readiness) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		cpuLoad = 1 - (cpuIdle / p.cpuStats.NumCPU())
 	}
 
+	var httpStatus int
+	var message string
 	if cpuLoad > p.readyCPULimit {
-		rw.WriteHeader(http.StatusNotAcceptable)
-		rw.Write([]byte("Not ready: CPU Limit reached\n"))
+		httpStatus = http.StatusNotAcceptable
+		message = "Not ready: CPU Limit reached"
 	} else if !p.rawdataHasSettled {
-		rw.WriteHeader(http.StatusNotAcceptable)
-		rw.Write([]byte("Not ready: Traefik raw data has not yet settled\n"))
+		httpStatus = http.StatusNotAcceptable
+		message = "Not ready: Traefik raw data has not yet settled"
 	} else {
-		rw.WriteHeader(http.StatusOK)
-		rw.Write([]byte("Ready\n"))
+		httpStatus = http.StatusOK
+		message = "Ready"
 	}
 
-	rw.Write([]byte("\n"))
+	if httpStatus != http.StatusOK {
+		os.Stderr.WriteString(fmt.Sprintf("readiness plugin not ok (%v): %s\n", httpStatus, message))
+		os.Stderr.WriteString(fmt.Sprintf("readiness plugin cpus: %v, cpu load: %v / %v\n", p.cpuStats.NumCPU(), cpuLoad, p.readyCPULimit))
+	}
+
+	rw.WriteHeader(httpStatus)
+	rw.Write([]byte(message))
+	rw.Write([]byte("\n\n"))
 	rw.Write([]byte(fmt.Sprintf("Num CPUs: %v\n", p.cpuStats.NumCPU())))
 	rw.Write([]byte(fmt.Sprintf("CPU Load: %v / %v\n", cpuLoad, p.readyCPULimit)))
 }

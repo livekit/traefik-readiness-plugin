@@ -27,6 +27,7 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
+	DryRun                bool    `json:"dry_run,omitempty"`
 	ReadyPath             string  `json:"ready_path,omitempty"`
 	ReadyCPULimit         float64 `json:"ready_cpu_limit,omitempty"`
 	TraefikAPIPort        int     `json:"traefik_api_port,omitempty"`
@@ -36,6 +37,7 @@ type Config struct {
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
+		DryRun:                false,
 		ReadyPath:             "/ready",
 		ReadyCPULimit:         0.8,
 		TraefikAPIPort:        9000,
@@ -48,6 +50,7 @@ type Readiness struct {
 	name     string
 	cpuStats *hwstats.CPUStats
 
+	dryRun            bool
 	readyPath         string
 	readyCPULimit     float64
 	rawdataHasSettled bool
@@ -64,6 +67,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		name:     name,
 		cpuStats: cpuStats,
 
+		dryRun:        config.DryRun,
 		readyPath:     config.ReadyPath,
 		readyCPULimit: config.ReadyCPULimit,
 	}
@@ -103,6 +107,10 @@ func (p *Readiness) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if httpStatus != http.StatusOK {
 		os.Stderr.WriteString(fmt.Sprintf("readiness plugin not ok (%v): %s\n", httpStatus, message))
 		os.Stderr.WriteString(fmt.Sprintf("readiness plugin cpus: %v, cpu load: %v / %v\n", p.cpuStats.NumCPU(), cpuLoad, p.readyCPULimit))
+
+		if p.dryRun {
+			httpStatus = http.StatusOK
+		}
 	}
 
 	rw.WriteHeader(httpStatus)

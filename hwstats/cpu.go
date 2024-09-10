@@ -66,7 +66,7 @@ func (c *CPUStats) Stop() {
 }
 
 func (c *CPUStats) monitorCPULoad() {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -80,9 +80,9 @@ func (c *CPUStats) monitorCPULoad() {
 				continue
 			}
 
-			c.mu.RLock()
+			c.mu.Lock()
 			c.idleCPUs = idle
-			c.mu.RUnlock()
+			c.mu.Unlock()
 		}
 	}
 }

@@ -27,19 +27,25 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	DryRun                bool    `json:"dry_run,omitempty"`
-	ReadyPath             string  `json:"ready_path,omitempty"`
-	ReadyCPULimit         float64 `json:"ready_cpu_limit,omitempty"`
-	TraefikAPIPort        int     `json:"traefik_api_port,omitempty"`
-	TraefikAPIRawdataPath string  `json:"traefik_api_rawdata_path,omitempty"`
+	DryRun bool `json:"dry_run,omitempty"`
+
+	ReadyPath     string  `json:"ready_path,omitempty"`
+	ReadyCPULimit float64 `json:"ready_cpu_limit,omitempty"`
+
+	EnableRawDataPoller   bool   `json:"enable_raw_data_poller,omitempty"`
+	TraefikAPIPort        int    `json:"traefik_api_port,omitempty"`
+	TraefikAPIRawdataPath string `json:"traefik_api_rawdata_path,omitempty"`
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		DryRun:                false,
-		ReadyPath:             "/ready",
-		ReadyCPULimit:         0.8,
+		DryRun: false,
+
+		ReadyPath:     "/ready",
+		ReadyCPULimit: 0.8,
+
+		EnableRawDataPoller:   false,
 		TraefikAPIPort:        9000,
 		TraefikAPIRawdataPath: "/api/rawdata",
 	}
@@ -72,7 +78,11 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		readyCPULimit: config.ReadyCPULimit,
 	}
 
-	go r.rawdataPoller(config.TraefikAPIPort, config.TraefikAPIRawdataPath)
+	if config.EnableRawDataPoller {
+		go r.rawdataPoller(config.TraefikAPIPort, config.TraefikAPIRawdataPath)
+	} else {
+		r.rawdataHasSettled = true
+	}
 
 	return r, nil
 }
